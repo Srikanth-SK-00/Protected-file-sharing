@@ -1,0 +1,58 @@
+const express = require("express");
+const bcrypt =require("bcrypt");
+require("dotenv").config()
+const app = express();
+app.use(express.urlencoded({extended: true}));
+const File=require('./models/file');
+const multer=require("multer");
+const mongoose=require("mongoose")
+const upload=multer({dest:"uploads"});
+mongoose.connect('mongodb://127.0.0.1/filesharing')
+app.set("view engine","ejs")
+
+app.get('/',(req, res)=>
+{
+    res.render('index')
+})
+app.post('/upload',upload.single("file"),async(req, res)=>
+{
+   const filedata={
+    path:req.file.path,
+    originalname:req.file.originalname
+   }
+   if(req.body.password!=null && req.body.password !=="")
+   {
+     filedata.password = await bcrypt.hash(req.body.password,10)
+   }
+   const file=await File.create(filedata)
+   console.log(file)
+   res.render("index",{filelink:`${req.headers.origin}/file/${file.id}`})
+
+   
+})
+app.route("/file/:id").get(handledownload).post(handledownload);
+
+async function handledownload(req,res)
+{
+    const file=await File.findById(req.params.id);
+    if(file.password !=null)
+    {
+       if(req.body.password==null)
+       {
+           res.render("password");
+           return
+       }
+       if(!(await bcrypt.compare(req.body.password,file.password)))
+       {
+           res.render("password",{error:true});
+           return
+       }
+    }
+    file.downloadcount++;
+    await file.save();
+   res.download(file.path,file.originalname);
+   
+   
+}
+app.listen(3001)
+
